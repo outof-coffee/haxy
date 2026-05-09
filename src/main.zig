@@ -13,25 +13,20 @@ pub const RunOpts = struct {
 };
 
 pub fn main(init: std.process.Init) !u8 {
+    const io = init.io;
+
     var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-    const allocator = if (builtin.mode == .Debug) debug_allocator.allocator() else std.heap.smp_allocator;
+    const allocator = if (builtin.mode == .Debug) debug_allocator.allocator() else init.arena.allocator();
+
     defer if (builtin.mode == .Debug) {
         _ = debug_allocator.deinit();
     };
 
-    var threaded = std.Io.Threaded.init(allocator, .{});
-    defer threaded.deinit();
-    const io = threaded.io();
+    var args: std.ArrayList([:0]const u8) = .empty;
+    const init_args = try init.minimal.args.toSlice(allocator);
+    const filtered_args = init_args[1..];
 
-    var args: std.ArrayList([]const u8) = .empty;
-    defer args.deinit(allocator);
-
-    var arg_it = try init.minimal.args.iterateAllocator(allocator);
-    defer arg_it.deinit();
-    _ = arg_it.skip();
-    while (arg_it.next()) |arg| {
-        try args.append(allocator, arg);
-    }
+    try args.appendSlice(allocator, filtered_args);
 
     var stdout_writer = std.Io.File.stdout().writer(io, &.{});
     var stderr_writer = std.Io.File.stderr().writer(io, &.{});
